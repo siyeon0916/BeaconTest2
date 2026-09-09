@@ -1,4 +1,4 @@
-#Thu Jul 23 13:27:25 KST 2026
+#Wed Sep 09 17:23:27 KST 2026
 base.0=C\:\\BeaconTest-master\\app\\build\\intermediates\\dex\\debug\\mergeExtDexDebug\\classes.dex
 base.1=C\:\\BeaconTest-master\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\0\\classes.dex
 base.2=C\:\\BeaconTest-master\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\6\\classes.dex

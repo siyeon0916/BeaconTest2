@@ -3192,8 +3192,11 @@ id bounce
 id bounceBoth
 id bounceEnd
 id bounceStart
+id btnExportCsv
 id btnScan
+id btnStartCollect
 id btnStop
+id btnStopCollect
 id buttonPanel
 id cache_measures
 id callMeasure
@@ -3276,6 +3279,10 @@ id endToStart
 id enterAlways
 id enterAlwaysCollapsed
 id escape
+id etGridCol
+id etGridRow
+id etXMeter
+id etYMeter
 id exitUntilCollapsed
 id expand_activities_button
 id expanded_menu
@@ -3576,6 +3583,8 @@ id transition_position
 id transition_scene_layoutid_cache
 id transition_transform
 id triangle
+id tvCollectCount
+id tvCollectStatus
 id tvCount
 id tvDistance
 id tvEmpty
@@ -5257,4 +5266,5 @@ styleable ViewPager2 android_orientation
 styleable ViewStubCompat android_id android_layout android_inflatedId
 styleable ViewTransition android_id SharedValue SharedValueId clearsTag duration ifTagNotSet ifTagSet motionInterpolator motionTarget onStateTransition pathMotionArc setsTag transitionDisable upDuration viewTransitionMode
 styleable include constraintSet
+xml file_paths
 xml network_security_config

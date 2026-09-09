@@ -8,7 +8,7 @@
       </SelectionState>
       <SelectionState runConfigName="Downloads.BeaconScanner.app">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2026-07-23T03:30:20.882971800Z">
+        <DropdownSelection timestamp="2026-09-09T08:23:10.047285500Z">
           <Target type="DEFAULT_BOOT">
             <handle>
               <DeviceId pluginId="PhysicalDevice" identifier="serial=R3CR70QD66H" />
