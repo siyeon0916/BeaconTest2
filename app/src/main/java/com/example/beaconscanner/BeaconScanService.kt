@@ -67,12 +67,13 @@ class BeaconScanService : LifecycleService() {
 
     // 🆕 학습 대상 비콘 (기존 refreshRunnable과 동일한 6개, 한 곳으로 통일)
     private val targetBeacons = listOf(
-        TargetBeaconInfo("A1", 40011, 29433),
-        TargetBeaconInfo("A2", 40011, 29445),
-        TargetBeaconInfo("A3", 40011, 29430),
-        TargetBeaconInfo("A4", 40011, 29429),
-        TargetBeaconInfo("A5", 40011, 29427),
-        TargetBeaconInfo("A6", 40011, 29438)
+        TargetBeaconInfo("A1", 40011, 29429),
+        TargetBeaconInfo("A2", 40011, 29433),
+        TargetBeaconInfo("A3", 40011, 29439),
+        TargetBeaconInfo("A4", 40011, 29445),
+        TargetBeaconInfo("A5", 40011, 29430),
+        TargetBeaconInfo("A6", 40011, 29438),
+        TargetBeaconInfo("A7", 40011, 29427)
     )
 
     companion object {
