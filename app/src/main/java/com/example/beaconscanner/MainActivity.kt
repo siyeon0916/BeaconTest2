@@ -20,7 +20,6 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 
@@ -43,7 +42,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etYMeter: EditText
     private lateinit var btnStartCollect: Button
     private lateinit var btnStopCollect: Button
-    private lateinit var btnExportCsv: Button
     private lateinit var tvCollectStatus: TextView
     private lateinit var tvCollectCount: TextView
 
@@ -88,7 +86,6 @@ class MainActivity : AppCompatActivity() {
         etYMeter = findViewById(R.id.etYMeter)
         btnStartCollect = findViewById(R.id.btnStartCollect)
         btnStopCollect = findViewById(R.id.btnStopCollect)
-        btnExportCsv = findViewById(R.id.btnExportCsv)
         tvCollectStatus = findViewById(R.id.tvCollectStatus)
         tvCollectCount = findViewById(R.id.tvCollectCount)
 
@@ -125,11 +122,6 @@ class MainActivity : AppCompatActivity() {
             scanService?.stopCollection()
         }
 
-        // 🆕 CSV 파일 공유(내보내기) — 이메일/카톡/드라이브 등으로 전송
-        btnExportCsv.setOnClickListener {
-            exportCsv()
-        }
-
         // 🆕 수집 상태 관찰
         BeaconScanService.collectionStatusLiveData.observe(this) { status ->
             tvCollectStatus.text = status
@@ -163,33 +155,6 @@ class MainActivity : AppCompatActivity() {
         if (isBound) {
             unbindService(connection)
             isBound = false
-        }
-    }
-
-    // 🆕 CSV 파일을 다른 앱(카카오톡, 이메일, 드라이브 등)으로 공유
-    private fun exportCsv() {
-        val service = scanService
-        if (service == null) {
-            Toast.makeText(this, "스캔 서비스가 실행 중이어야 내보낼 수 있습니다.", Toast.LENGTH_SHORT).show()
-            return
-        }
-        try {
-            val file = service.getCsvFile()
-            if (!file.exists()) {
-                Toast.makeText(this, "아직 수집된 데이터가 없습니다.", Toast.LENGTH_SHORT).show()
-                return
-            }
-            val uri: Uri = FileProvider.getUriForFile(
-                this, "${applicationContext.packageName}.fileprovider", file
-            )
-            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/csv"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            startActivity(Intent.createChooser(shareIntent, "CSV 파일 내보내기"))
-        } catch (e: Exception) {
-            Toast.makeText(this, "내보내기 실패: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
         }
     }
 

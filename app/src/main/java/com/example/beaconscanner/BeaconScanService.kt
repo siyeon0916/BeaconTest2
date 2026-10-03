@@ -25,17 +25,13 @@ import okhttp3.Response
 import org.altbeacon.beacon.Beacon
 import org.altbeacon.beacon.BeaconManager
 import org.altbeacon.beacon.Region
-import java.io.File
 import java.io.IOException
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlin.collections.ArrayDeque
 
 /**
- * 🟢 백그라운드 BLE 비콘 스캔 & HTTP 서버 전송 + 🆕 딥러닝 학습용 CSV 데이터 수집 기능
+ * 🟢 백그라운드 BLE 비콘 스캔 & HTTP 서버 전송 + 🆕 딥러닝 학습용 CSV 데이터 수집(노트북으로 전송 -> 노트북에서 CSV 저장) 기능
  */
 class BeaconScanService : LifecycleService() {
 
@@ -44,6 +40,7 @@ class BeaconScanService : LifecycleService() {
     private val handler = Handler(Looper.getMainLooper())
     private val refreshInterval = 1000L
     private val beaconTimeoutMs = 5000L
+    private val rssiWindowSize = 3
     private val binder = LocalBinder()
 
     private val httpClient = OkHttpClient.Builder()
@@ -62,8 +59,6 @@ class BeaconScanService : LifecycleService() {
     private var currentGridCol = -1
     private var currentXM = 0.0
     private var currentYM = 0.0
-    private lateinit var csvFile: File
-    private val csvDateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
 
     // 🆕 학습 대상 비콘 (기존 refreshRunnable과 동일한 6개, 한 곳으로 통일)
     private val targetBeacons = listOf(
@@ -101,7 +96,6 @@ class BeaconScanService : LifecycleService() {
         super.onCreate()
         getOrCreateScannerId()
         createNotificationChannel()
-        initCsvFile() // 🆕
 
         beaconManager = BeaconManager.getInstanceForApplication(this)
         beaconManager.foregroundScanPeriod = 1100L
@@ -146,7 +140,7 @@ class BeaconScanService : LifecycleService() {
                     val key = beaconKey(beacon)
                     val existing = beaconCache[key]
                     val history = existing?.rssiHistory ?: ArrayDeque()
-                    if (history.size >= 15) history.removeFirst()
+                    if (history.size >= rssiWindowSize) history.removeFirst()
                     history.addLast(beacon.rssi)
                     beaconCache[key] = CachedBeacon(beacon, now, history)
                 }
@@ -160,19 +154,14 @@ class BeaconScanService : LifecycleService() {
         }
     }
 
-    // 🆕 6개 타깃 비콘의 트림 평균 RSSI를 한 번에 계산 (기존 서버 전송용 로직과 CSV 수집용 로직 공유)
-    private fun computeTrimmedAvgRssiList(): List<Int> {
+    // Moving Average로 변경(09.17 수정)
+    private fun computeMovingAvgRssiList(): List<Int> {
         return targetBeacons.map { target ->
             val cached = beaconCache.values.find {
                 it.beacon.id2?.toInt() == target.major && it.beacon.id3?.toInt() == target.minor
             }
             if (cached != null && cached.rssiHistory.isNotEmpty()) {
-                val sortedRssi = cached.rssiHistory.sorted()
-                val trimCount = (sortedRssi.size * 0.2).toInt()
-                val trimmedList = if (sortedRssi.size >= 5)
-                    sortedRssi.subList(trimCount, sortedRssi.size - trimCount)
-                else sortedRssi
-                if (trimmedList.isNotEmpty()) trimmedList.average().toInt() else -100
+                cached.rssiHistory.average().toInt()
             } else -100
         }
     }
@@ -186,7 +175,7 @@ class BeaconScanService : LifecycleService() {
             beaconCacheLiveData.postValue(beaconCache.toMap())
             updateNotification()
 
-            val avgRssiList = computeTrimmedAvgRssiList() // 🆕 공용 계산
+            val avgRssiList = computeMovingAvgRssiList()
 
             // ── 기존: 서버로 실시간 전송 ──
             val beaconJsonList = targetBeacons.mapIndexed { i, target ->
@@ -208,20 +197,12 @@ class BeaconScanService : LifecycleService() {
             """.trimIndent()
             sendToServer(finalJsonBody)
 
-            // ── 🆕 데이터 수집 모드: CSV 한 줄 기록 ──
+            // ── 🆕 데이터 수집 모드: 노트북 서버로 전송 (CSV는 노트북에서 저장) ──
             if (isCollecting) {
-                writeCsvRow(avgRssiList)
+                sendCollectToLaptop(avgRssiList)
             }
 
             handler.postDelayed(this, refreshInterval)
-        }
-    }
-
-    // 🆕 CSV 파일 초기화 (헤더 작성)
-    private fun initCsvFile() {
-        csvFile = File(getExternalFilesDir(null), "beacon_training_data.csv")
-        if (!csvFile.exists()) {
-            csvFile.writeText("timestamp,gridRow,gridCol,x_m,y_m,rssi_A1,rssi_A2,rssi_A3,rssi_A4,rssi_A5,rssi_A6,scannerId\n")
         }
     }
 
@@ -243,22 +224,34 @@ class BeaconScanService : LifecycleService() {
         Log.d("DataCollector", "⏹ 수집 중단")
     }
 
-    private fun writeCsvRow(avgRssiList: List<Int>) {
-        try {
-            val ts = csvDateFormat.format(Date())
-            val row = "$ts,$currentGridRow,$currentGridCol,$currentXM,$currentYM," +
-                    "${avgRssiList.joinToString(",")},$scannerId\n"
-            csvFile.appendText(row)
+    // 수집 데이터를 노트북 서버로 전송 (노트북이 CSV 한 줄로 저장)
+    private fun sendCollectToLaptop(avgRssiList: List<Int>) {
+            val json = """{"gridRow":$currentGridRow,"gridCol":$currentGridCol,""" +
+                    """"x_m":$currentXM,"y_m":$currentYM,""" +
+                    """"rssi":[${avgRssiList.joinToString(",")}], "scannerId":"$scannerId"}"""
+            val request = Request.Builder()
+                .url(BeaconConfig.COLLECT_URL)
+                .post(json.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .build()
 
-            val count = (collectedRowCountLiveData.value ?: 0) + 1
-            collectedRowCountLiveData.postValue(count)
-        } catch (e: Exception) {
-            Log.e("DataCollector", "❌ CSV 쓰기 실패: ${e.message}")
-        }
+            httpClient.newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    Log.e("DataCollector", "❌ 노트북 전송 실패: ${e.localizedMessage}")
+                    collectionStatusLiveData.postValue("⚠ 노트북 전송 실패 (IP/서버 확인)")
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    response.use {
+                        if (it.isSuccessful) {
+                            val count = (collectedRowCountLiveData.value ?: 0) + 1
+                            collectedRowCountLiveData.postValue(count)
+                        } else {
+                            Log.e("DataCollector", "❌ 노트북 응답 코드: ${it.code}")
+                        }
+                    }
+                }
+            })
     }
-
-    // 🆕 저장된 CSV 파일 경로 반환 (공유/내보내기용)
-    fun getCsvFile(): File = csvFile
 
     private fun sendToServer(jsonBody: String) {
         val targetUrl = BeaconConfig.SERVER_URL

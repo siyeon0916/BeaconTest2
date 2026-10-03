@@ -44,4 +44,6 @@ object BeaconConfig {
 
     const val SERVER_URL = "http://$CURRENT_PC_IP:4000/api/location"
     const val WEB_APP_URL = "http://$CURRENT_PC_IP:5173"
+    // CSV 저장 전용 수신 서버 (노트북에서 csv_server.js 실행)
+    const val COLLECT_URL = "http://$CURRENT_PC_IP:4001/api/collect"
 }
