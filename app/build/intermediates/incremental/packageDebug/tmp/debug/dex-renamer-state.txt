@@ -1,8 +1,8 @@
-#Thu Oct 01 10:21:07 KST 2026
-base.0=C\:\\Users\\siyeo\\Downloads\\Beacontest-Master2-main\\Beacontest-Master2-main\\app\\build\\intermediates\\dex\\debug\\mergeExtDexDebug\\classes.dex
-base.1=C\:\\Users\\siyeo\\Downloads\\Beacontest-Master2-main\\Beacontest-Master2-main\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\0\\classes.dex
-base.2=C\:\\Users\\siyeo\\Downloads\\Beacontest-Master2-main\\Beacontest-Master2-main\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\6\\classes.dex
-base.3=C\:\\Users\\siyeo\\Downloads\\Beacontest-Master2-main\\Beacontest-Master2-main\\app\\build\\intermediates\\dex\\debug\\mergeExtDexDebug\\classes2.dex
+#Tue Oct 06 10:47:17 KST 2026
+base.0=C\:\\BeaconTest2-main\\app\\build\\intermediates\\dex\\debug\\mergeExtDexDebug\\classes.dex
+base.1=C\:\\BeaconTest2-main\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\0\\classes.dex
+base.2=C\:\\BeaconTest2-main\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\6\\classes.dex
+base.3=C\:\\BeaconTest2-main\\app\\build\\intermediates\\dex\\debug\\mergeExtDexDebug\\classes2.dex
 path.0=classes.dex
 path.1=0/classes.dex
 path.2=6/classes.dex

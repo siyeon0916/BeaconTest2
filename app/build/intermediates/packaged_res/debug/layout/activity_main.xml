@@ -223,13 +223,6 @@
                 android:text="수집 중단" />
         </LinearLayout>
 
-        <Button
-            android:id="@+id/btnExportCsv"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="CSV 내보내기" />
-
         <TextView
             android:id="@+id/tvCollectStatus"
             android:layout_width="wrap_content"
