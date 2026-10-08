@@ -2,7 +2,6 @@ R_DEF: Internal format may change without notice
 local
 drawable ic_launcher_background
 drawable ic_launcher_foreground
-id btnExportCsv
 id btnScan
 id btnStartCollect
 id btnStop

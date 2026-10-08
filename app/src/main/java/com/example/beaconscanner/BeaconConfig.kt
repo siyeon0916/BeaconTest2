@@ -39,11 +39,13 @@ object BeaconConfig {
     var GRID_CELL_SIZE = 1.0
 
     // ── 🛠️ 주소 설정 구간 ──
-    // ⚠️ 팀원 각자가 본인 PC의 사설 IP 주소를 조사한 뒤 '192.168.0.2' 대신 넣어주어야 로직이 동작합니다.
-    private const val CURRENT_PC_IP = "172.18.41.69"
+    // 배포 서버 (Render): https로 시작, 공백 없이, 맨 끝에 / 붙이지 않기
+    private const val BASE = "https://guidant-rsyf.onrender.com"
 
-    const val SERVER_URL = "http://$CURRENT_PC_IP:4000/api/location"
-    const val WEB_APP_URL = "http://$CURRENT_PC_IP:5173"
-    // CSV 저장 전용 수신 서버 (노트북에서 csv_server.js 실행)
-    const val COLLECT_URL = "http://$CURRENT_PC_IP:4001/api/collect"
+    const val SERVER_URL = "$BASE/api/location"
+    const val WEB_APP_URL = BASE
+
+    // 학습 데이터 수집 전용 (노트북에서 csv_server.js를 켰을 때만 사용, 폰과 노트북이 같은 Wi-Fi여야 함)
+    private const val LAPTOP_IP = "172.18.41.69"
+    const val COLLECT_URL = "http://$LAPTOP_IP:4001/api/collect"
 }
