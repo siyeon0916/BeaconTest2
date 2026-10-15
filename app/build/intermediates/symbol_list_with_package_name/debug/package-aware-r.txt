@@ -3192,7 +3192,6 @@ id bounce
 id bounceBoth
 id bounceEnd
 id bounceStart
-id btnExportCsv
 id btnScan
 id btnStartCollect
 id btnStop
@@ -3279,8 +3278,6 @@ id endToStart
 id enterAlways
 id enterAlwaysCollapsed
 id escape
-id etGridCol
-id etGridRow
 id etXMeter
 id etYMeter
 id exitUntilCollapsed

@@ -36,8 +36,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvLocation: TextView
 
     // 🆕 [데이터 수집 모드] UI
-    private lateinit var etGridRow: EditText
-    private lateinit var etGridCol: EditText
     private lateinit var etXMeter: EditText
     private lateinit var etYMeter: EditText
     private lateinit var btnStartCollect: Button
@@ -80,8 +78,6 @@ class MainActivity : AppCompatActivity() {
         tvLocation = findViewById(R.id.tvLocation)
 
         // 🆕 데이터 수집 모드 뷰 (activity_main.xml에 아래 id로 뷰를 추가해야 합니다 — 안내 참고)
-        etGridRow = findViewById(R.id.etGridRow)
-        etGridCol = findViewById(R.id.etGridCol)
         etXMeter = findViewById(R.id.etXMeter)
         etYMeter = findViewById(R.id.etYMeter)
         btnStartCollect = findViewById(R.id.btnStartCollect)
@@ -101,20 +97,18 @@ class MainActivity : AppCompatActivity() {
 
         // 🆕 데이터 수집 시작 — 그리드 좌표 입력값 검증 후 서비스에 전달
         btnStartCollect.setOnClickListener {
-            val row = etGridRow.text.toString().toIntOrNull()
-            val col = etGridCol.text.toString().toIntOrNull()
             val xM = etXMeter.text.toString().toDoubleOrNull()
             val yM = etYMeter.text.toString().toDoubleOrNull()
 
-            if (row == null || col == null || xM == null || yM == null) {
-                Toast.makeText(this, "행/열/x(m)/y(m)을 모두 정확히 입력하세요.", Toast.LENGTH_SHORT).show()
+            if (xM == null || yM == null) {
+                Toast.makeText(this, "x(m)/y(m)을 정확히 입력하세요.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             if (!isBound) {
                 Toast.makeText(this, "먼저 '스캔 시작'을 눌러 스캔을 켜주세요.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            scanService?.startCollection(row, col, xM, yM)
+            scanService?.startCollection(xM, yM)
         }
 
         // 🆕 데이터 수집 중단

@@ -16,9 +16,9 @@ object BeaconConfig {
 
     // ── 📡 리액트 맵 픽셀 구조(1m = 45px)와 매칭된 비콘 실제 배치 ──
     val BEACONS = listOf(
-        BeaconInfo("E2C56DB5DFFB48D2B060D0F5A71096E0", major = 40011, minor = 29429, x = 1.0,  y = 0.0 ),  // AEB5=A1
-        BeaconInfo("E2C56DB5DFFB48D2B060D0F5A71096E0", major = 40011, minor = 29433, x = 0.0,  y = 3.5 ),  // AEBF=A2
-        BeaconInfo("E2C56DB5DFFB48D2B060D0F5A71096E0", major = 40011, minor = 29439, x = 0.0,  y = 7.0 ),  // AEB6=A3
+        BeaconInfo("E2C56DB5DFFB48D2B060D0F5A71096E0", major = 40011, minor = 29429, x = 1.0,  y = 0.0),  // AEB5=A1
+        BeaconInfo("E2C56DB5DFFB48D2B060D0F5A71096E0", major = 40011, minor = 29433, x = 0.0,  y = 3.5),  // AEBF=A2
+        BeaconInfo("E2C56DB5DFFB48D2B060D0F5A71096E0", major = 40011, minor = 29439, x = 0.0,  y = 7.0),  // AEB6=A3
         BeaconInfo("E2C56DB5DFFB48D2B060D0F5A71096E0", major = 40011, minor = 29445, x = 5.0,  y = 10.0),  // AEB3=A4
         BeaconInfo("E2C56DB5DFFB48D2B060D0F5A71096E0", major = 40011, minor = 29430, x = 8.0,  y = 6.9),  // AEBE=A5
         BeaconInfo("E2C56DB5DFFB48D2B060D0F5A71096E0", major = 40011, minor = 29438, x = 8.0,  y =3.3),   // AE89=A6
@@ -40,7 +40,7 @@ object BeaconConfig {
 
     // ── 🛠️ 주소 설정 구간 ──
     // ⚠️ 팀원 각자가 본인 PC의 사설 IP 주소를 조사한 뒤 '192.168.0.2' 대신 넣어주어야 로직이 동작합니다.
-    private const val CURRENT_PC_IP = "172.18.41.69"
+    private const val CURRENT_PC_IP = "192.168.0.3"
 
     const val SERVER_URL = "http://$CURRENT_PC_IP:4000/api/location"
     const val WEB_APP_URL = "http://$CURRENT_PC_IP:5173"

@@ -55,8 +55,6 @@ class BeaconScanService : LifecycleService() {
 
     // 🆕 [데이터 수집 모드] 상태
     private var isCollecting = false
-    private var currentGridRow = -1
-    private var currentGridCol = -1
     private var currentXM = 0.0
     private var currentYM = 0.0
 
@@ -207,14 +205,12 @@ class BeaconScanService : LifecycleService() {
     }
 
     // 🆕 그리드 포인트 지정하고 수집 시작 (MainActivity에서 bindService 후 호출)
-    fun startCollection(row: Int, col: Int, xM: Double, yM: Double) {
-        currentGridRow = row
-        currentGridCol = col
+    fun startCollection(xM: Double, yM: Double) {
         currentXM = xM
         currentYM = yM
         isCollecting = true
-        collectionStatusLiveData.postValue("수집 중: R$row C$col ($xM m, $yM m)")
-        Log.d("DataCollector", "▶️ 수집 시작: row=$row col=$col x=$xM y=$yM")
+        collectionStatusLiveData.postValue("수집 중: ($xM m, $yM m)")
+        Log.d("DataCollector", "▶️ 수집 시작: x=$xM y=$yM")
     }
 
     // 🆕 수집 중단
@@ -226,8 +222,7 @@ class BeaconScanService : LifecycleService() {
 
     // 수집 데이터를 노트북 서버로 전송 (노트북이 CSV 한 줄로 저장)
     private fun sendCollectToLaptop(avgRssiList: List<Int>) {
-            val json = """{"gridRow":$currentGridRow,"gridCol":$currentGridCol,""" +
-                    """"x_m":$currentXM,"y_m":$currentYM,""" +
+            val json = """{"x_m":$currentXM,"y_m":$currentYM,""" +
                     """"rssi":[${avgRssiList.joinToString(",")}], "scannerId":"$scannerId"}"""
             val request = Request.Builder()
                 .url(BeaconConfig.COLLECT_URL)
@@ -310,7 +305,7 @@ class BeaconScanService : LifecycleService() {
 
     private fun updateNotification() {
         val manager = getSystemService(NotificationManager::class.java)
-        val suffix = if (isCollecting) " · 데이터수집중(R$currentGridRow C$currentGridCol)" else ""
+        val suffix = if (isCollecting) " · 데이터수집중($currentXM m $currentYM m)" else ""
         manager?.notify(NOTIFICATION_ID, buildNotification("감지된 비콘: ${beaconCache.size}개$suffix"))
     }
 
