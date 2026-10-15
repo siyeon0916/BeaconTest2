@@ -229,31 +229,36 @@ class BeaconScanService : LifecycleService() {
                 .post(json.toRequestBody("application/json; charset=utf-8".toMediaType()))
                 .build()
 
-            httpClient.newCall(request).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    Log.e("DataCollector", "❌ 노트북 전송 실패: ${e.localizedMessage}")
-                    collectionStatusLiveData.postValue("⚠ 노트북 전송 실패 (IP/서버 확인)")
-                }
+        httpClient.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e("DataCollector", "❌ 노트북 전송 실패: ${e.localizedMessage}")
+                collectionStatusLiveData.postValue("⚠ 노트북 전송 실패 (IP/서버 확인)")
+            }
 
-                override fun onResponse(call: Call, response: Response) {
-                    response.use {
-                        if (it.isSuccessful) {
-                            val count = (collectedRowCountLiveData.value ?: 0) + 1
-                            collectedRowCountLiveData.postValue(count)
-                        } else {
-                            Log.e("DataCollector", "❌ 노트북 응답 코드: ${it.code}")
-                        }
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (it.isSuccessful) {
+                        val count = (collectedRowCountLiveData.value ?: 0) + 1
+                        collectedRowCountLiveData.postValue(count)
+                    } else {
+                        Log.e("DataCollector", "❌ 노트북 응답 코드: ${it.code}")
                     }
                 }
-            })
+            }
+        })
     }
 
     private fun sendToServer(jsonBody: String) {
-        val targetUrl = BeaconConfig.SERVER_URL
-        val mediaType = "application/json; charset=utf-8".toMediaType()
-        val body = jsonBody.toRequestBody(mediaType)
-        val request = Request.Builder().url(targetUrl).post(body)
-            .addHeader("Connection", "keep-alive").build()
+        val request = try {
+            Request.Builder()
+                .url(BeaconConfig.SERVER_URL.trim())
+                .post(jsonBody.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .addHeader("Connection", "keep-alive")
+                .build()
+        } catch (e: IllegalArgumentException) {
+            Log.e("BeaconNetwork", "❌ 잘못된 서버 URL: ${BeaconConfig.SERVER_URL} (${e.message})")
+            return
+        }
 
         httpClient.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
