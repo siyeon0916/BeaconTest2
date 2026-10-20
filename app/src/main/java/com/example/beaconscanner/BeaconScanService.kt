@@ -26,12 +26,20 @@ import org.altbeacon.beacon.Beacon
 import org.altbeacon.beacon.BeaconManager
 import org.altbeacon.beacon.Region
 import java.io.IOException
+import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlin.collections.ArrayDeque
+import kotlin.math.roundToInt
 
 /**
  * 🟢 백그라운드 BLE 비콘 스캔 & HTTP 서버 전송 + 🆕 딥러닝 학습용 CSV 데이터 수집(노트북으로 전송 -> 노트북에서 CSV 저장) 기능
+ *
+ * 📌 이번 수정 요약
+ *  1) 거리 계산의 txPower/n 값을 BeaconConfig 한 곳으로 통일 (기존: 여기 -59/2.0, 화면 -65/2.5로 따로 놀았음)
+ *  2) RSSI 처리: 최근 5개 중 최소·최대값을 버린 평균 (튀는 값 제거)
+ *  3) 신호가 안 잡힌 비콘(-100/99m)은 서버로 보내지 않음 → 서버가 가짜 비콘으로 계산하는 문제 방지
+ *  4) 비콘 목록을 BeaconConfig.BEACONS 하나만 사용 (중복 목록 제거)
  */
 class BeaconScanService : LifecycleService() {
 
@@ -40,7 +48,6 @@ class BeaconScanService : LifecycleService() {
     private val handler = Handler(Looper.getMainLooper())
     private val refreshInterval = 1000L
     private val beaconTimeoutMs = 5000L
-    private val rssiWindowSize = 3
     private val binder = LocalBinder()
 
     private val httpClient = OkHttpClient.Builder()
@@ -57,17 +64,6 @@ class BeaconScanService : LifecycleService() {
     private var isCollecting = false
     private var currentXM = 0.0
     private var currentYM = 0.0
-
-    // 🆕 학습 대상 비콘 (기존 refreshRunnable과 동일한 6개, 한 곳으로 통일)
-    private val targetBeacons = listOf(
-        TargetBeaconInfo("A1", 40011, 29429),
-        TargetBeaconInfo("A2", 40011, 29433),
-        TargetBeaconInfo("A3", 40011, 29439),
-        TargetBeaconInfo("A4", 40011, 29445),
-        TargetBeaconInfo("A5", 40011, 29430),
-        TargetBeaconInfo("A6", 40011, 29438),
-        TargetBeaconInfo("A7", 40011, 29427)
-    )
 
     companion object {
         const val CHANNEL_ID = "beacon_scan_channel"
@@ -138,7 +134,7 @@ class BeaconScanService : LifecycleService() {
                     val key = beaconKey(beacon)
                     val existing = beaconCache[key]
                     val history = existing?.rssiHistory ?: ArrayDeque()
-                    if (history.size >= rssiWindowSize) history.removeFirst()
+                    if (history.size >= BeaconConfig.RSSI_WINDOW_SIZE) history.removeFirst()
                     history.addLast(beacon.rssi)
                     beaconCache[key] = CachedBeacon(beacon, now, history)
                 }
@@ -152,15 +148,25 @@ class BeaconScanService : LifecycleService() {
         }
     }
 
-    // Moving Average로 변경(09.17 수정)
-    private fun computeMovingAvgRssiList(): List<Int> {
-        return targetBeacons.map { target ->
+    /**
+     * 비콘별 대표 RSSI 계산 (BeaconConfig.BEACONS 순서와 동일한 리스트 반환)
+     *  - 샘플이 2개 미만이면 아직 믿을 수 없으므로 MISSING_RSSI
+     *  - 샘플이 5개 이상이면 최소·최대값을 버리고 평균 (순간적으로 튄 값 제거)
+     *  - 소수점은 버리지 않고 반올림
+     */
+    private fun computeAvgRssiList(): List<Int> {
+        return BeaconConfig.BEACONS.map { info ->
             val cached = beaconCache.values.find {
-                it.beacon.id2?.toInt() == target.major && it.beacon.id3?.toInt() == target.minor
+                it.beacon.id2?.toInt() == info.major && it.beacon.id3?.toInt() == info.minor
             }
-            if (cached != null && cached.rssiHistory.isNotEmpty()) {
-                cached.rssiHistory.average().toInt()
-            } else -100
+            val history = cached?.rssiHistory
+            if (history == null || history.size < 2) {
+                BeaconConfig.MISSING_RSSI
+            } else {
+                val sorted = history.sorted()
+                val trimmed = if (sorted.size >= 5) sorted.subList(1, sorted.size - 1) else sorted
+                trimmed.average().roundToInt()
+            }
         }
     }
 
@@ -173,29 +179,31 @@ class BeaconScanService : LifecycleService() {
             beaconCacheLiveData.postValue(beaconCache.toMap())
             updateNotification()
 
-            val avgRssiList = computeMovingAvgRssiList()
+            val avgRssiList = computeAvgRssiList()
 
-            // ── 기존: 서버로 실시간 전송 ──
-            val beaconJsonList = targetBeacons.mapIndexed { i, target ->
-                val avgRssi = avgRssiList[i]
-                if (avgRssi != -100) {
-                    val distance = Math.pow(10.0, (-59 - avgRssi) / (10.0 * 2.0))
-                    """{"beaconId":"${target.beaconId}","rssi":$avgRssi,"distance":${String.format("%.2f", distance)}}"""
+            // ── 서버로 실시간 전송: 실제로 잡힌 비콘만 포함 ──
+            val validBeaconJson = BeaconConfig.BEACONS.mapIndexedNotNull { i, info ->
+                val rssi = avgRssiList[i]
+                if (rssi == BeaconConfig.MISSING_RSSI) {
+                    null
                 } else {
-                    """{"beaconId":"${target.beaconId}","rssi":-100,"distance":99.0}"""
+                    val distance = LocationEstimator.rssiToDistance(rssi, info.txPower)
+                    """{"beaconId":"${info.id}","rssi":$rssi,"distance":${String.format(Locale.US, "%.2f", distance)}}"""
                 }
             }
-            val beaconsArrayJson = beaconJsonList.joinToString(",", "[", "]")
-            val finalJsonBody = """
-                {
-                  "scannerId": "$scannerId",
-                  "mapId": "$mapId",
-                  "beacons": $beaconsArrayJson
-                }
-            """.trimIndent()
-            sendToServer(finalJsonBody)
 
-            // ── 🆕 데이터 수집 모드: 노트북 서버로 전송 (CSV는 노트북에서 저장) ──
+            if (validBeaconJson.size >= BeaconConfig.MIN_BEACONS_TO_SEND) {
+                val finalJsonBody = """
+                    {
+                      "scannerId": "$scannerId",
+                      "mapId": "$mapId",
+                      "beacons": ${validBeaconJson.joinToString(",", "[", "]")}
+                    }
+                """.trimIndent()
+                sendToServer(finalJsonBody)
+            }
+
+            // ── 🆕 데이터 수집 모드: 노트북 서버로 전송 (학습 데이터는 미검출도 -100으로 그대로 기록) ──
             if (isCollecting) {
                 sendCollectToLaptop(avgRssiList)
             }
@@ -222,12 +230,12 @@ class BeaconScanService : LifecycleService() {
 
     // 수집 데이터를 노트북 서버로 전송 (노트북이 CSV 한 줄로 저장)
     private fun sendCollectToLaptop(avgRssiList: List<Int>) {
-            val json = """{"x_m":$currentXM,"y_m":$currentYM,""" +
-                    """"rssi":[${avgRssiList.joinToString(",")}], "scannerId":"$scannerId"}"""
-            val request = Request.Builder()
-                .url(BeaconConfig.COLLECT_URL)
-                .post(json.toRequestBody("application/json; charset=utf-8".toMediaType()))
-                .build()
+        val json = """{"x_m":$currentXM,"y_m":$currentYM,""" +
+                """"rssi":[${avgRssiList.joinToString(",")}], "scannerId":"$scannerId"}"""
+        val request = Request.Builder()
+            .url(BeaconConfig.COLLECT_URL)
+            .post(json.toRequestBody("application/json; charset=utf-8".toMediaType()))
+            .build()
 
         httpClient.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
