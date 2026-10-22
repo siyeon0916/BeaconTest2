@@ -28,6 +28,7 @@ import org.altbeacon.beacon.Region
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.collections.ArrayDeque
 
 /**
@@ -39,8 +40,11 @@ class BeaconScanService : LifecycleService() {
     private val beaconCache = mutableMapOf<String, CachedBeacon>()
     private val handler = Handler(Looper.getMainLooper())
     private val refreshInterval = 1000L
-    private val beaconTimeoutMs = 5000L
-    private val rssiWindowSize = 3
+    private val beaconTimeoutMs = 3000L
+    private val rssiWindowSize = 3 // 화면(UI) 표시용 : 비콘별 최근 값 개수
+    private var lastCycleMs = 0L
+    private var warmupCycles = 0
+    private val collectedRows = AtomicInteger(0)
     private val binder = LocalBinder()
 
     private val httpClient = OkHttpClient.Builder()
@@ -69,6 +73,13 @@ class BeaconScanService : LifecycleService() {
         TargetBeaconInfo("A7", 40011, 29427)
     )
 
+    // 비콘별 "가장 최근 값" 테이블 (A1~A7 한 칸씩)
+    // 7개를 모두 한 번씩 받으면 위치 계산 시작(tableReady)
+    // 이후 새 값이 오면 그 비콘 칸만 새 값으로 덮어쓰고 위치를 다시 계산
+    private val latestRssi = arrayOfNulls<Int>(targetBeacons.size)
+    private val latestTsMs = LongArray(targetBeacons.size)
+    private val staleTimeOutMs = 10_000L // 이 시간 동안 새 값이 없으면 그 칸은 -100(미수신)으로 취급
+    private var tableReady = false
     companion object {
         const val CHANNEL_ID = "beacon_scan_channel"
         const val NOTIFICATION_ID = 1001
@@ -133,15 +144,32 @@ class BeaconScanService : LifecycleService() {
             val regionViewModel = beaconManager.getRegionViewModel(region)
 
             regionViewModel.rangedBeacons.observe(this, Observer { beaconsCollection ->
-                val now = System.currentTimeMillis()
+                val cycleMs = System.currentTimeMillis()
+                val updatedIdx = mutableSetOf<Int>()
                 beaconsCollection?.forEach { beacon ->
+                    // 화면 표시용 비콘별 캐시 (기존 유지)
                     val key = beaconKey(beacon)
-                    val existing = beaconCache[key]
-                    val history = existing?.rssiHistory ?: ArrayDeque()
-                    if (history.size >= rssiWindowSize) history.removeFirst()
+                    val history = beaconCache[key]?.rssiHistory ?: ArrayDeque()
                     history.addLast(beacon.rssi)
-                    beaconCache[key] = CachedBeacon(beacon, now, history)
+                    while (history.size > rssiWindowSize) history.removeFirst()
+                    beaconCache[key] = CachedBeacon(beacon, cycleMs, history)
+
+                    // 해당 비콘 칸만 새 값으로 덮어쓰기 (평균 없음)
+                    val idx = targetBeacons.indexOfFirst {
+                        it.major == beacon.id2?.toInt() && it.minor == beacon.id3?.toInt()
+                    }
+                    if (idx >= 0) {
+                        latestRssi[idx] = beacon.rssi
+                        latestTsMs[idx] = cycleMs
+                        updatedIdx.add(idx)
+                    }
                 }
+                if (!tableReady && latestRssi.all { it != null }) {
+                    tableReady = true
+                    Log.d("BeaconScanService", "✅ 비콘 7개 모두 수신 → 위치 계산 시작")
+                }
+                lastCycleMs = cycleMs
+                onScanCycle(cycleMs, updatedIdx)
             })
 
             statusLiveData.postValue("스캔 중")
@@ -152,60 +180,63 @@ class BeaconScanService : LifecycleService() {
         }
     }
 
-    // Moving Average로 변경(09.17 수정)
-    private fun computeMovingAvgRssiList(): List<Int> {
-        return targetBeacons.map { target ->
-            val cached = beaconCache.values.find {
-                it.beacon.id2?.toInt() == target.major && it.beacon.id3?.toInt() == target.minor
-            }
-            if (cached != null && cached.rssiHistory.isNotEmpty()) {
-                cached.rssiHistory.average().toInt()
-            } else -100
+    // 현재 테이블 값 (한 번도 못 받았거나 staleTimeoutMs 넘게 새 값이 없으면 -100)
+    private fun currentRssiList(now: Long): List<Int> {
+        return targetBeacons.indices.map { i ->
+            val v = latestRssi[i]
+            if (v == null || now - latestTsMs[i] > staleTimeOutMs) -100 else v
         }
     }
 
+    private fun buildServerJson(rssiList: List<Int>): String {
+        val beaconJsonList = targetBeacons.mapIndexed { i, target ->
+            val rssi = rssiList[i]
+            if (rssi != -100) {
+                val distance = Math.pow(10.0, (-59 - rssi) / (10.0 * 2.0))
+                """{"beaconId":"${target.beaconId}","rssi":$rssi,"distance":${String.format("%.2f", distance)}}"""
+            } else {
+                """{"beaconId":"${target.beaconId}","rssi":-100,"distance":99.0}"""
+            }
+        }
+        val beaconsArrayJson = beaconJsonList.joinToString(",", "[", "]")
+        return """
+            {
+                "scannerId": "$scannerId",
+                "mapId": "$mapId",
+                "beacons": $beaconsArrayJson
+            }
+        """.trimIndent()
+    }
+
+    // 스캔 사이클마다 1번: 위치 서버 전송(7개 모두 받은 뒤부터) → (수집 중이면) 새로 들어온 비콘의 행만 CSV 전송
+    private fun onScanCycle(cycleMs: Long, updatedIdx: Set<Int>) {
+        val now = System.currentTimeMillis()
+        beaconCache.entries.removeAll { now - it.value.lastSeenMs > beaconTimeoutMs }
+
+        beaconCacheLiveData.postValue(beaconCache.toMap())
+        updateNotification()
+
+        val rssiList = currentRssiList(now)
+        if (tableReady) sendToServer(buildServerJson(rssiList)) // 실시간 위치용 : 초기 7개 수신 후부터
+
+        if (isCollecting && updatedIdx.isNotEmpty()) {  // 학습 CSV용: 새로 들어온 값의 행만
+            if (warmupCycles > 0) warmupCycles-- else sendCollectToLaptop(rssiList, updatedIdx, cycleMs)
+        }
+    }
+
+    // 스캔 콜백이 한동안 없을 때만 동작하는 하트비트 (위치 서버에 현재 테이블 재전송 / 만료 정리용, CSV에는 영향 없음)
     private val refreshRunnable = object : Runnable {
         override fun run() {
             val now = System.currentTimeMillis()
-            val expiredKeys = beaconCache.entries.filter { now - it.value.lastSeenMs > beaconTimeoutMs }.map { it.key }
-            expiredKeys.forEach { beaconCache.remove(it) }
-
-            beaconCacheLiveData.postValue(beaconCache.toMap())
-            updateNotification()
-
-            val avgRssiList = computeMovingAvgRssiList()
-
-            // ── 기존: 서버로 실시간 전송 ──
-            val beaconJsonList = targetBeacons.mapIndexed { i, target ->
-                val avgRssi = avgRssiList[i]
-                if (avgRssi != -100) {
-                    val distance = Math.pow(10.0, (-59 - avgRssi) / (10.0 * 2.0))
-                    """{"beaconId":"${target.beaconId}","rssi":$avgRssi,"distance":${String.format("%.2f", distance)}}"""
-                } else {
-                    """{"beaconId":"${target.beaconId}","rssi":-100,"distance":99.0}"""
-                }
-            }
-            val beaconsArrayJson = beaconJsonList.joinToString(",", "[", "]")
-            val finalJsonBody = """
-                {
-                  "scannerId": "$scannerId",
-                  "mapId": "$mapId",
-                  "beacons": $beaconsArrayJson
-                }
-            """.trimIndent()
-            sendToServer(finalJsonBody)
-
-            // ── 🆕 데이터 수집 모드: 노트북 서버로 전송 (CSV는 노트북에서 저장) ──
-            if (isCollecting) {
-                sendCollectToLaptop(avgRssiList)
-            }
-
+            if (now - lastCycleMs > 1500L) onScanCycle(now, emptySet())
             handler.postDelayed(this, refreshInterval)
         }
     }
 
     // 🆕 그리드 포인트 지정하고 수집 시작 (MainActivity에서 bindService 후 호출)
     fun startCollection(xM: Double, yM: Double) {
+        // 좌표를 바꾼 직후, 이전 지점에서 받던 스캔 사이클이 새 좌표 라벨로 저장되지 않도록 첫 2사이클은 버림
+        warmupCycles = 2
         currentXM = xM
         currentYM = yM
         isCollecting = true
@@ -220,10 +251,12 @@ class BeaconScanService : LifecycleService() {
         Log.d("DataCollector", "⏹ 수집 중단")
     }
 
-    // 수집 데이터를 노트북 서버로 전송 (노트북이 CSV 한 줄로 저장)
-    private fun sendCollectToLaptop(avgRssiList: List<Int>) {
-            val json = """{"x_m":$currentXM,"y_m":$currentYM,""" +
-                    """"rssi":[${avgRssiList.joinToString(",")}], "scannerId":"$scannerId"}"""
+    // 수집 데이터를 노트북 서버로 전송 (새 값이 온 비콘만 값 ,나머지는 null → 서버가 그 행은 건너뜀)
+    private fun sendCollectToLaptop(rssiList: List<Int>, rowsIdx: Set<Int>, cycleMs: Long) {
+            val rssiJson = rssiList.mapIndexed { i, r -> if (i in rowsIdx) "$r" else "null" }
+                .joinToString(",")
+            val json = """{"ts":$cycleMs,"x_m":$currentXM,"y_m":$currentYM,""" +
+                    """"rssi":[$rssiJson],"scannerId":"$scannerId"}"""
             val request = Request.Builder()
                 .url(BeaconConfig.COLLECT_URL)
                 .post(json.toRequestBody("application/json; charset=utf-8".toMediaType()))
@@ -238,8 +271,7 @@ class BeaconScanService : LifecycleService() {
             override fun onResponse(call: Call, response: Response) {
                 response.use {
                     if (it.isSuccessful) {
-                        val count = (collectedRowCountLiveData.value ?: 0) + 1
-                        collectedRowCountLiveData.postValue(count)
+                        collectedRowCountLiveData.postValue(collectedRows.addAndGet(rowsIdx.size))
                     } else {
                         Log.e("DataCollector", "❌ 노트북 응답 코드: ${it.code}")
                     }
@@ -295,7 +327,9 @@ class BeaconScanService : LifecycleService() {
                 CHANNEL_ID, "비콘 위치 스캔", NotificationManager.IMPORTANCE_LOW
             ).apply { description = "백그라운드 실시간 실내 위치 측정이 구동 중입니다." }
             val manager = getSystemService(NotificationManager::class.java)
-            manager?.createNotificationChannel(channel)
+            val suffix = if (isCollecting) " · 데이터수집중($currentXM m $currentYM m)" else ""
+            val initInfo = if (tableReady) "" else " · chrlghk ${latestRssi.count { it != null }}/${targetBeacons.size}"
+            manager?.notify(NOTIFICATION_ID, buildNotification("감지된 비콘: ${beaconCache.size}개$initInfo$suffix"))
         }
     }
 
