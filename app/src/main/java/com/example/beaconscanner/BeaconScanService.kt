@@ -135,7 +135,8 @@ class BeaconScanService : LifecycleService() {
                     val existing = beaconCache[key]
                     val history = existing?.rssiHistory ?: ArrayDeque()
                     if (history.size >= BeaconConfig.RSSI_WINDOW_SIZE) history.removeFirst()
-                    history.addLast(beacon.rssi)
+                    val avg = beacon.runningAverageRssi
+                    history.addLast(if (avg < 0) avg.roundToInt() else beacon.rssi)
                     beaconCache[key] = CachedBeacon(beacon, now, history)
                 }
             })
