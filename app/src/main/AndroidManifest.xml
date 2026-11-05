@@ -39,12 +39,27 @@
         <!-- 런처 메인 액티비티 -->
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- QR 스캔 → 웹 /start 페이지 → guidant://start 로 앱 실행  -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="guidant" android:host="start" />
+            </intent-filter>
         </activity>
+
+        <!-- 데이터 수집(관리자) 화면 -->
+        <activity
+            android:name=".CollectActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
 
         <!-- 백그라운드 BLE 스캔 전담 서비스 -->
         <service

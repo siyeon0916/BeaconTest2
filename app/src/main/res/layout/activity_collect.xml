@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 데이터 수집(관리자) 전용 화면 — 기존 activity_main.xml 하단의 "데이터 수집 모드" 영역을 이 화면으로 분리 -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0F1117"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- 헤더 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="8dp"
+            android:paddingBottom="16dp">
+            <TextView
+                android:id="@+id/btnBack"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="←"
+                android:textSize="22sp"
+                android:textColor="#F0F2F8"
+                android:paddingEnd="12dp"
+                android:background="?attr/selectableItemBackgroundBorderless"/>
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="📍 데이터 수집 (관리자)"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="#F0F2F8"/>
+            <TextView
+                android:id="@+id/tvScanState"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="● 대기중"
+                android:textSize="13sp"
+                android:textColor="#6B7280"/>
+        </LinearLayout>
+
+        <!-- 스캔이 꺼져 있을 때 안내 -->
+        <TextView
+            android:id="@+id/tvScanHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:background="#3A2A12"
+            android:padding="12dp"
+            android:text="⚠ 스캔이 꺼져 있습니다. 메인 화면에서 '스캔 시작'을 먼저 눌러주세요."
+            android:textSize="13sp"
+            android:textColor="#FBBF24"/>
+
+        <!-- 좌표 입력 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#1A1D2E"
+            android:padding="14dp"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="수집 지점 좌표"
+                android:textSize="12sp"
+                android:textColor="#6B7280"
+                android:layout_marginBottom="4dp"/>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <EditText
+                    android:id="@+id/etXMeter"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="x (m)"
+                    android:textColorHint="#6B7280"
+                    android:textColor="#F0F2F8"
+                    android:inputType="numberDecimal"/>
+                <View android:layout_width="12dp" android:layout_height="1dp"/>
+                <EditText
+                    android:id="@+id/etYMeter"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="y (m)"
+                    android:textColorHint="#6B7280"
+                    android:textColor="#F0F2F8"
+                    android:inputType="numberDecimal"/>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="8dp">
+                <Button
+                    android:id="@+id/btnStartCollect"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="수집 시작"
+                    android:textColor="#FFFFFF"
+                    android:backgroundTint="#3B82F6"/>
+                <View android:layout_width="8dp" android:layout_height="1dp"/>
+                <Button
+                    android:id="@+id/btnStopCollect"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="수집 중단"
+                    android:backgroundTint="#374151"/>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 수집 상태 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#1A1D2E"
+            android:padding="14dp"
+            android:layout_marginBottom="12dp">
+            <TextView
+                android:id="@+id/tvCollectStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="미수집"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#F0F2F8"/>
+            <TextView
+                android:id="@+id/tvCollectCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="수집된 행: 0개"
+                android:textColor="#6B7280"/>
+            <TextView
+                android:id="@+id/tvCollectUrl"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:textColor="#4B5563"/>
+        </LinearLayout>
+
+        <!-- A1~A7 실시간 수신 현황 (수집 지점에서 7개가 다 잡히는지 확인용) -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="비콘 수신 현황 (A1~A7)"
+            android:textSize="12sp"
+            android:textColor="#6B7280"
+            android:layout_marginBottom="6dp"/>
+        <TextView
+            android:id="@+id/tvBeaconTable"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#1A1D2E"
+            android:padding="14dp"
+            android:text="-"
+            android:textSize="14sp"
+            android:lineSpacingExtra="4dp"
+            android:textColor="#F0F2F8"
+            android:fontFamily="monospace"/>
+
+    </LinearLayout>
+</ScrollView>

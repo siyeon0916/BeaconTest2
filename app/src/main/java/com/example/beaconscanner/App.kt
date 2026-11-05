@@ -9,6 +9,7 @@ import android.util.Log
 import org.altbeacon.beacon.BeaconManager
 import org.altbeacon.beacon.BeaconParser
 import org.altbeacon.beacon.Region
+import org.altbeacon.beacon.service.RunningAverageRssiFilter
 
 class App : Application() {
 
@@ -43,6 +44,7 @@ class App : Application() {
 
         // 3. ⚠️ JobScheduler에 의해 10초마다 스캔이 재시작되는 현상 차단
         beaconManager.setEnableScheduledScanJobs(false)
+        RunningAverageRssiFilter.setSampleExpirationMilliseconds(3000L) // 최근 3초 패킷으로 평균
 
         // 4. Android 8.0 이상 대응: OS가 스캔을 강제로 껐다 켜는 것을 막기 위한 Foreground Service 채널 설정
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
