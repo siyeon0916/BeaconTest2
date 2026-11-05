@@ -13,7 +13,7 @@ object BeaconConfig {
     // 📶 RSSI 처리 / 전송 기준
     // ══════════════════════════════════════════════════════════════
     const val MISSING_RSSI = -100        // 신호가 안 잡힌 비콘 표시값
-    const val RSSI_WINDOW_SIZE = 3       // 비콘별 최근 RSSI 보관 개수 (스캔 1.1초 기준 약 5초)
+    const val RSSI_WINDOW_SIZE = 3       // 비콘별 최근 RSSI 보관 개수 (스캔 1.1초 기준 약 3.3초)
     const val MIN_BEACONS_TO_SEND = 3    // 이 개수 미만으로 잡히면 서버 전송 생략 (대역폭 절약)
 
     private const val BEACON_UUID = "E2C56DB5DFFB48D2B060D0F5A71096E0"
@@ -33,23 +33,14 @@ object BeaconConfig {
 
     // ── 📡 비콘 배치 (앱 화면 표시용, 서버 위치 계산은 DB에 등록된 좌표를 사용합니다) ──
     val BEACONS = listOf(
-        BeaconInfo("A1", BEACON_UUID, major = 40011, minor = 29429, x = 1.0,  y = 0.0),  // AEB5=A1
-        BeaconInfo("A2", BEACON_UUID, major = 40011, minor = 29439, x = 0.0,  y = 3.5),  // AEBF=A2
-        BeaconInfo("A3", BEACON_UUID, major = 40011, minor = 29430, x = 0.0,  y = 7.0),  // AEB6=A3
-        BeaconInfo("A4", BEACON_UUID, major = 40011, minor = 29427, x = 5.0,  y = 10.0),  // AEB3=A4
-        BeaconInfo("A5", BEACON_UUID, major = 40011, minor = 29438, x = 8.0,  y = 6.9),  // AEBE=A5
-        BeaconInfo("A6", BEACON_UUID, major = 40011, minor = 29433, x = 8.0,  y =3.3),   // AEB9=A6
-        BeaconInfo("A7", BEACON_UUID, major = 40011, minor = 29445, x = 6.1,  y =0.0),   // AEC5=A7
-
-
+        BeaconInfo("A1", BEACON_UUID, major = 40011, minor = 29429, x = 1.0, y = 0.0),  // AEB5=A1
+        BeaconInfo("A2", BEACON_UUID, major = 40011, minor = 29439, x = 0.0, y = 3.5),  // AEBF=A2
+        BeaconInfo("A3", BEACON_UUID, major = 40011, minor = 29430, x = 0.0, y = 7.0),  // AEB6=A3
+        BeaconInfo("A4", BEACON_UUID, major = 40011, minor = 29427, x = 5.0, y = 10.0),  // AEB3=A4
+        BeaconInfo("A5", BEACON_UUID, major = 40011, minor = 29438, x = 8.0, y = 6.9),  // AEBE=A5
+        BeaconInfo("A6", BEACON_UUID, major = 40011, minor = 29433, x = 8.0, y = 3.3),   // AEB9=A6
+        BeaconInfo("A7", BEACON_UUID, major = 40011, minor = 29445, x = 6.1, y = 0.0),   // AEC5=A7
     )
-
-    // ── 📐 공간 크기 (웹앱 MapSketch.jsx와 동일: 가로 8m × 세로 10m, 1m = 75px) ──
-    const val ROOM_WIDTH = 8.00
-    const val ROOM_HEIGHT = 10.00
-    const val PIXEL_SCALE = 75.0
-
-    var GRID_CELL_SIZE = 1.0
 
     // ── 🛠️ 서버 주소 ──
     // 배포 서버 (Render): https로 시작, 공백 없이, 맨 끝에 / 붙이지 않기
@@ -59,6 +50,7 @@ object BeaconConfig {
     const val WEB_APP_URL = BASE
 
     // 학습 데이터 수집 전용 (노트북에서 csv_server.js를 켰을 때만 사용, 폰과 노트북이 같은 Wi-Fi여야 함)
-    private const val LAPTOP_IP = "172.20.10.3"
-    const val COLLECT_URL = "http://$LAPTOP_IP:4001/api/collect"
+    // 노트북 IP는 local.properties의 server.ip 값을 사용 (IP가 바뀌면 local.properties만 수정)
+    private val LAPTOP_IP = BuildConfig.SERVER_IP
+    val COLLECT_URL = "http://$LAPTOP_IP:4001/api/collect"
 }

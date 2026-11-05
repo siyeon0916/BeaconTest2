@@ -1,12 +1,10 @@
 package com.example.beaconscanner
 
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.os.Binder
-import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -22,7 +20,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
-import org.altbeacon.beacon.Beacon
 import org.altbeacon.beacon.BeaconManager
 import org.altbeacon.beacon.Region
 import java.io.IOException
@@ -31,7 +28,6 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.collections.ArrayDeque
-import kotlin.compareTo
 import kotlin.math.roundToInt
 
 /**
@@ -121,31 +117,9 @@ class BeaconScanService : LifecycleService() {
     override fun onCreate() {
         super.onCreate()
         getOrCreateScannerId()
-        createNotificationChannel()
 
+        // 스캔 주기·포그라운드 스캔·알림 채널 설정은 App.kt에서 한 번만 함
         beaconManager = BeaconManager.getInstanceForApplication(this)
-        beaconManager.foregroundScanPeriod = 1100L
-        beaconManager.foregroundBetweenScanPeriod = 0L
-        beaconManager.backgroundScanPeriod = 1100L
-        beaconManager.backgroundBetweenScanPeriod = 0L
-        beaconManager.setEnableScheduledScanJobs(false)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            try {
-                beaconManager.enableForegroundServiceScanning(
-                    buildNotification("비콘 신호를 스캐닝하고 있습니다."),
-                    NOTIFICATION_ID
-                )
-            } catch (e: Exception) {
-                Log.e("BeaconScanService", "Foreground scanning 설정 실패: ${e.message}")
-            }
-        }
-
-        try {
-            beaconManager.updateScanPeriods()
-        } catch (e: Exception) {
-            Log.e("BeaconScanService", "ScanPeriod 반영 실패: ${e.message}")
-        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -168,7 +142,7 @@ class BeaconScanService : LifecycleService() {
                 val updatedIdx = mutableSetOf<Int>()
                 beaconsCollection?.forEach { beacon ->
                     // 화면 표시용 비콘별 캐시 (기존 유지)
-                    val key = beaconKey(beacon)
+                    val key = BeaconUtils.beaconKey(beacon)
                     val history = beaconCache[key]?.rssiHistory ?: ArrayDeque()
                     val avg = beacon.runningAverageRssi
                     history.addLast(if (avg < 0) avg.roundToInt() else beacon.rssi)
@@ -201,15 +175,8 @@ class BeaconScanService : LifecycleService() {
         }
     }
 
-    /**
-     * 비콘별 대표 RSSI 계산 (BeaconConfig.BEACONS 순서와 동일한 리스트 반환)
-     * - 샘플이 2개 미만이면 아직 믿을 수 없으므로 MISSING_RSSI
-     * - 샘플이 5개 이상이면 최소·최대값을 버리고 평균 (순간적으로 튄 값 제거)
-     * - 소수점은 버리지 않고 반올림
-     * 👉 서버(위치 계산) 전송용
-     */
-
-    // 현재 테이블 값 (한 번도 못 받았거나 staleTimeoutMs 넘게 새 값이 없으면 -100)
+    // 비콘별 최근 RSSI_WINDOW_SIZE개 평균 (BeaconConfig.BEACONS 순서, 샘플 2개 미만이면 -100)
+    // 서버(위치 계산) 전송용
     private fun computeAvgRssiList(): List<Int> {
         return targetBeacons.map { info ->
             val cached = beaconCache.values.find {
@@ -219,9 +186,7 @@ class BeaconScanService : LifecycleService() {
             if (history == null || history.size < 2) {
                 BeaconConfig.MISSING_RSSI
             } else {
-                val sorted = history.sorted()
-                val trimmed = if (sorted.size >= 5) sorted.subList(1, sorted.size -1) else sorted
-                trimmed.average().roundToInt()
+                history.average().roundToInt()
             }
         }
     }
@@ -362,23 +327,6 @@ class BeaconScanService : LifecycleService() {
        scannerId = getOrCreateScannerId(this)
     }
 
-    private fun beaconKey(beacon: Beacon): String {
-        val rawUuid = beacon.id1?.toString()?.replace("-", "")?.uppercase() ?: "UNKNOWN"
-        val major = beacon.id2?.toInt() ?: 0
-        val minor = beacon.id3?.toInt() ?: 0
-        return "$rawUuid-$major-$minor"
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID, "비콘 위치 스캔", NotificationManager.IMPORTANCE_LOW
-            ).apply { description = "백그라운드 실시간 실내 위치 측정이 구동 중입니다." }
-            val manager = getSystemService(NotificationManager::class.java)
-            manager?.createNotificationChannel(channel)
-        }
-    }
-
     private fun buildNotification(text: String): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Guidant 비콘 스캐너")
@@ -393,19 +341,6 @@ class BeaconScanService : LifecycleService() {
         val suffix = if (isCollecting) " · 데이터수집중($currentXM m $currentYM m)" else ""
         val initInfo = if (tableReady) "" else " · 초기화 ${latestRssi.count { it != null }}/${targetBeacons.size}"
         manager?.notify(NOTIFICATION_ID, buildNotification("감지된 비콘: ${beaconCache.size}개$initInfo$suffix"))
-    }
-
-    fun stopScanning() {
-        handler.removeCallbacks(refreshRunnable)
-        try {
-            beaconManager.stopRangingBeacons(region)
-        } catch (e: Exception) {
-            Log.e("BeaconScanService", "스캔 중지 오류: ${e.message}")
-        }
-        statusLiveData.postValue("대기중")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
-        else @Suppress("DEPRECATION") stopForeground(true)
-        stopSelf()
     }
 
     override fun onDestroy() {

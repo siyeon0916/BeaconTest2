@@ -33,9 +33,9 @@ class BeaconAdapter(private val beacons: MutableList<Beacon>) :
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val beacon = beacons[position]
 
-        // MAC 주소 또는 Service Key 형태로 캐시에서 조회
-        val key = beaconKey(beacon)
-        val cached = cache[key] ?: cache[beacon.bluetoothAddress]
+        // UUID-major-minor 키로 캐시에서 조회
+        val key = BeaconUtils.beaconKey(beacon)
+        val cached = cache[key]
 
         // 최근 RSSI 히스토리 평균값 계산
         val avgRssi = cached?.rssiHistory?.takeIf { it.isNotEmpty() }?.average()?.toInt() ?: beacon.rssi
@@ -63,8 +63,7 @@ class BeaconAdapter(private val beacons: MutableList<Beacon>) :
         holder.tvSignalLabel.setTextColor(BeaconUtils.rssiColor(avgRssi))
 
         // 거리 계산 (Path Loss Model 적용)
-        val beaconKeyStr = "${id1?.uppercase()}-${beacon.id2?.toInt()}-${beacon.id3?.toInt()}"
-        val configTxPower = BeaconConfig.BEACONS.find { it.key == beaconKeyStr }?.txPower ?: beacon.txPower
+        val configTxPower = BeaconConfig.BEACONS.find { it.key == key }?.txPower ?: beacon.txPower
         val dist = LocationEstimator.rssiToDistance(avgRssi, configTxPower)
 
         holder.tvDistance.text = "거리: ${"%.2f".format(dist)} m"
@@ -75,7 +74,6 @@ class BeaconAdapter(private val beacons: MutableList<Beacon>) :
         val type = when {
             beacon.serviceUuid == 0xFEAA -> "Eddystone"
             id1 != null && id2 != null && id3 != null -> "iBeacon"
-            id1 != null && id2 != null -> "AltBeacon"
             id1 != null -> "AltBeacon"
             else -> "BLE Device"
         }
@@ -89,12 +87,5 @@ class BeaconAdapter(private val beacons: MutableList<Beacon>) :
         beacons.clear()
         beacons.addAll(newBeacons)
         notifyDataSetChanged()
-    }
-
-    private fun beaconKey(beacon: Beacon): String {
-        val rawUuid = beacon.id1?.toString()?.replace("-", "")?.uppercase() ?: "UNKNOWN"
-        val major = beacon.id2?.toInt() ?: 0
-        val minor = beacon.id3?.toInt() ?: 0
-        return "$rawUuid-$major-$minor"
     }
 }

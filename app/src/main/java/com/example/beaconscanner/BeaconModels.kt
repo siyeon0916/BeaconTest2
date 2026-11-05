@@ -10,9 +10,3 @@ data class CachedBeacon(
     val lastSeenMs: Long,
     val rssiHistory: ArrayDeque<Int> = ArrayDeque()
 )
-
-data class TargetBeaconInfo(
-    val beaconId: String,
-    val major: Int,
-    val minor: Int
-)

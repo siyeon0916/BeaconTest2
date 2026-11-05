@@ -21,7 +21,7 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        // local.properties에서 SERVER_IP를 읽어오며, 기본값 지정
+        // local.properties의 server.ip = 데이터 수집용 노트북 IP (BeaconConfig.COLLECT_URL에서 사용)
         buildConfigField(
             "String",
             "SERVER_IP",
@@ -70,8 +70,4 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
-    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
-
-    // 🟢 5. 비동기 처리를 위한 Kotlin Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 }

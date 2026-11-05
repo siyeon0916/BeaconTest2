@@ -33,7 +33,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvCount: TextView
     private lateinit var tvStrong: TextView
     private lateinit var tvEmpty: TextView
-    private lateinit var tvLocation: TextView
 
     // 데이터 수집 화면(CollectActivity)으로 가는 버튼
     private lateinit var btnAdmin: TextView
@@ -64,7 +63,6 @@ class MainActivity : AppCompatActivity() {
         tvCount = findViewById(R.id.tvCount)
         tvStrong = findViewById(R.id.tvStrong)
         tvEmpty = findViewById(R.id.tvEmpty)
-        tvLocation = findViewById(R.id.tvLocation)
 
         btnAdmin = findViewById(R.id.btnAdmin)
 
@@ -103,8 +101,6 @@ class MainActivity : AppCompatActivity() {
         BeaconScanService.readyLiveData.observe(this) { ready ->
             if (ready && launchedFromQr) openWebApp()
         }
-
-        checkBluetooth()
 
         // 화면 회전 등으로 다시 만들어질 때는 안내창을 또 띄우지 않음
         if (savedInstanceState == null) handleQrLaunch(intent)
@@ -149,13 +145,6 @@ class MainActivity : AppCompatActivity() {
             .appendQueryParameter("sid", sid)
             .build()
         startActivity(Intent(Intent.ACTION_VIEW, uri))
-    }
-
-    private fun checkBluetooth() {
-        val btManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        if (btManager.adapter == null || !btManager.adapter.isEnabled) {
-            Toast.makeText(this, "블루투스를 활성화해 주세요.", Toast.LENGTH_LONG).show()
-        }
     }
 
     // 스캔에 꼭 필요한 권한 (알림 권한은 거부해도 스캔은 진행)
