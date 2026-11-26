@@ -70,14 +70,8 @@ class BeaconAdapter(private val beacons: MutableList<Beacon>) :
         holder.tvTxPower.text = "TX: ${beacon.txPower} dBm"
         holder.tvMac.text = "MAC: ${beacon.bluetoothAddress}"
 
-        // 비콘 타입 분류
-        val type = when {
-            beacon.serviceUuid == 0xFEAA -> "Eddystone"
-            id1 != null && id2 != null && id3 != null -> "iBeacon"
-            id1 != null -> "AltBeacon"
-            else -> "BLE Device"
-        }
-        holder.tvType.text = type
+        // iBeacon 파서만 등록했으므로 항상 iBeacon(다른 비콘 종류 추가 시 수정)
+        holder.tvType.text = "iBeacon"
     }
 
     override fun getItemCount() = beacons.size

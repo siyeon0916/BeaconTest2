@@ -48,6 +48,8 @@ object BeaconConfig {
 
     const val SERVER_URL = "$BASE/api/location"
     const val WEB_APP_URL = BASE
+    // 웹앱 접속 여부 확인 (웹앱을 나가면 스캔 자동 중단)
+    const val WEB_PRESENCE_URL = "$BASE/api/location/web-presence"
 
     // 학습 데이터 수집 전용 (노트북에서 csv_server.js를 켰을 때만 사용, 폰과 노트북이 같은 Wi-Fi여야 함)
     // 노트북 IP는 local.properties의 server.ip 값을 사용 (IP가 바뀌면 local.properties만 수정)

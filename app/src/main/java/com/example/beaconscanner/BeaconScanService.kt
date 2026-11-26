@@ -22,6 +22,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.altbeacon.beacon.BeaconManager
 import org.altbeacon.beacon.Region
+import org.json.JSONObject
 import java.io.IOException
 import java.util.Locale
 import java.util.UUID
@@ -31,7 +32,7 @@ import kotlin.collections.ArrayDeque
 import kotlin.math.roundToInt
 
 /**
- * 🟢 백그라운드 BLE 비콘 스캔 & HTTP 서버 전송 + 🆕 딥러닝 학습용 CSV 데이터 수집(노트북으로 전송 -> 노트북에서 CSV 저장) 기능
+ * 🟢 백그라운드 BLE 비콘 스캔 & HTTP 서버 전송 + 딥러닝 학습용 CSV 데이터 수집(노트북으로 전송 -> 노트북에서 CSV 저장) 기능
 
  📌 이번 수정 요약
  1) 거리 계산의 txPower/n 값을 BeaconConfig 한 곳으로 통일
@@ -62,7 +63,7 @@ class BeaconScanService : LifecycleService() {
     private val mapId = "6a4e268e4b23f93d45141083"
     private val region = Region("all-beacons", null, null, null)
 
-    // 🆕 [데이터 수집 모드] 상태
+    // [데이터 수집 모드] 상태
     private var isCollecting = false
     private var currentXM = 0.0
     private var currentYM = 0.0
@@ -78,14 +79,30 @@ class BeaconScanService : LifecycleService() {
     private val staleTimeOutMs = 10_000L // 이 시간 동안 새 값이 없으면 그 칸은 -100(미수신)으로 취급
     private var tableReady = false
     private var isScanning = false
+    private var serverSendStarted = false
+
+    // 웹앱 연동 모드: QR로 웹앱을 연 뒤에는 웹앱을 나가면 스캔 자동 중단
+    private var watchWeb = false    // 웹앱 접속 확인 중인지
+    private var webSeen = false     // 웹앱 접속을 한 번이라도 확인했는지
+    private var webWatchStartMs = 0L    // 웹앱을 연 시각
+    private var webInactiveSinceMs = 0L // 웹앱이 닫혀 있다고 처음 확인된 시각 (0 = 열려 있음)
+    private var lastPresenceCheckMs = 0L
+
     companion object {
         const val CHANNEL_ID = "beacon_scan_channel"
         const val NOTIFICATION_ID = 1001
 
+        // MainActivity가 웹앱을 열 때 보내는 액션 → 이때부터 웹앱 접속 여부를 확인
+        const val ACTION_WATCH_WEB = "com.example.beaconscanner.WATCH_WEB"
+        private const val PRESENCE_CHECK_INTERVAL_MS = 5_000L   // 접속 확인 주기
+        private const val WEB_INACTIVE_GRACE_MS = 30_000L       // 웹앱을 나가고 이 시간동안 안 돌아오면 중단
+        private const val WEB_FIRST_CONNECT_TIMEOUT_MS = 120_000L   // 웹앱을 열었는데 2분 안에 접속이 없으면 중단
+
+
         val beaconCacheLiveData = MutableLiveData<Map<String, CachedBeacon>>(emptyMap())
         val statusLiveData = MutableLiveData("대기중")
 
-        // 🆕 데이터 수집 상태를 화면(MainActivity)에서 관찰할 수 있도록 LiveData로 노출
+        // 데이터 수집 상태를 화면(MainActivity)에서 관찰할 수 있도록 LiveData로 노출
         val collectionStatusLiveData = MutableLiveData("미수집")
         val collectedRowCountLiveData = MutableLiveData(0)
         // 수집 중 여부 (상태 문구가 "⚠ 전송 실패"로 바뀌어도 수집은 계속되므로 별도 플래그로 노출)
@@ -129,6 +146,7 @@ class BeaconScanService : LifecycleService() {
             isScanning = true
             startScanning()
         }
+        if (intent?.action == ACTION_WATCH_WEB) startWebWatch()
         return START_STICKY
     }
 
@@ -160,7 +178,6 @@ class BeaconScanService : LifecycleService() {
                 }
                 if (!tableReady && latestRssi.all { it != null }) {
                     tableReady = true
-                    readyLiveData.postValue(true)
                     Log.d("BeaconScanService", "✅ 비콘 7개 모두 수신 → 위치 계산 시작")
                 }
                 lastCycleMs = cycleMs
@@ -230,7 +247,10 @@ class BeaconScanService : LifecycleService() {
         updateNotification()
 
         // 실시간 위치용 : 이동평균 값, 잡힌 비콘이 MIN_BEACONS_TO_SEND 이상이면 바로 전송
-        buildServerJson(computeAvgRssiList())?.let { sendToServer(it) }
+        buildServerJson(computeAvgRssiList())?.let {
+            sendToServer(it)
+            if (!serverSendStarted) { serverSendStarted = true; readyLiveData.postValue(true) }
+        }
 
         if (isCollecting && updatedIdx.isNotEmpty()) {  // 학습 CSV용: 새로 들어온 원본 값의 행만
             if (warmupCycles > 0) warmupCycles-- else sendCollectToLaptop(currentRssiList(now), updatedIdx, cycleMs)
@@ -242,11 +262,81 @@ class BeaconScanService : LifecycleService() {
         override fun run() {
             val now = System.currentTimeMillis()
             if (now - lastCycleMs > 1500L) onScanCycle(now, emptySet())
+            if (watchWeb && now - lastPresenceCheckMs >= PRESENCE_CHECK_INTERVAL_MS) {
+                lastPresenceCheckMs = now
+                checkWebPresence()
+            }
             handler.postDelayed(this, refreshInterval)
         }
     }
 
-    // 🆕 그리드 포인트 지정하고 수집 시작 (MainActivity에서 bindService 후 호출)
+    // 웹앱 연동: 웹앱을 나가면 스캔 자동 중단
+    private fun startWebWatch() {
+        watchWeb = true
+        webSeen = false
+        webWatchStartMs = System.currentTimeMillis()
+        webInactiveSinceMs = 0L
+        Log.d("WebPresence", "웹앱 접속 확인 시작")
+    }
+
+    // 서버에 "이 기기의 웹앱이 열려 있는지" 물어봄 (true / false / null=접속한 적 없음)
+    private fun checkWebPresence() {
+        val request = Request.Builder()
+            .url("${BeaconConfig.WEB_PRESENCE_URL}/$scannerId")
+            .get()
+            .build()
+        httpClient.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                // 서버에 연결이 안 되면 웹앱도 쓸 수 없는 상태 → "닫힘"으로 취급 (유예 시간은 동일하게 적용)
+                handler.post { onWebPresence(false) }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                if (response.code == 404) { // 서버에 web-presence API가 아직 없으면 자동 중단 기능 끔
+                    response.close()
+                    handler.post { watchWeb = false }
+                    return
+                }
+                val active: Boolean? = response.use {
+                    if (!it.isSuccessful) return@use false
+                    try {
+                        val json = JSONObject(it.body?.string() ?: "{}")
+                        if (json.isNull("webActive")) null else json.getBoolean("webActive")
+                    } catch (e: Exception) {
+                        false
+                    }
+                }
+                handler.post { onWebPresence(active) }
+            }
+        })
+    }
+
+    private fun onWebPresence(active: Boolean?) {
+        if (!watchWeb || isCollecting) return   // 데이터 수집 중에는 자동 중단하지 않음
+        val now = System.currentTimeMillis()
+
+        if (active == true) {
+            webSeen = true
+            webInactiveSinceMs = 0L
+            return
+        }
+        if (!webSeen) {
+            // 웹앱을 열었는데 아직 한 번도 접속이 없음 → 제한 시간까지만 기다림
+            if (now - webWatchStartMs > WEB_FIRST_CONNECT_TIMEOUT_MS) stopBecauseWebClosed("웹앱 접속 없음")
+            return
+        }
+        // 웹앱을 나감 → 유예 시간 안에 돌아오지 않으면 중단
+        if (webInactiveSinceMs == 0L) webInactiveSinceMs = now
+        else if (now - webInactiveSinceMs >= WEB_INACTIVE_GRACE_MS) stopBecauseWebClosed("웹앱 종료")
+    }
+
+    private fun stopBecauseWebClosed(reason: String) {
+        Log.d("WebPresence", "⏹ $reason → 스캔 자동 중단")
+        watchWeb = false
+        stopSelf() // → onDestroy에서 스캔 정지 + 상태 "대기중"
+    }
+
+    // 그리드 포인트 지정하고 수집 시작 (MainActivity에서 bindService 후 호출)
     fun startCollection(xM: Double, yM: Double) {
         // 좌표를 바꾼 직후, 이전 지점에서 받던 스캔 사이클이 새 좌표 라벨로 저장되지 않도록 첫 2사이클은 버림
         warmupCycles = 2
@@ -260,7 +350,7 @@ class BeaconScanService : LifecycleService() {
         Log.d("DataCollector", "▶️ 수집 시작: x=$xM y=$yM")
     }
 
-    // 🆕 수집 중단
+    // 수집 중단
     fun stopCollection() {
         isCollecting = false
 
@@ -345,6 +435,7 @@ class BeaconScanService : LifecycleService() {
 
     override fun onDestroy() {
         handler.removeCallbacks(refreshRunnable)
+        stopCollection() // 수집 상태 LiveData 초기화
         try {
             beaconManager.stopRangingBeacons(region) // 라이브러리 스캔도 확실히 정지
         } catch (e: Exception) {

@@ -144,6 +144,10 @@ class MainActivity : AppCompatActivity() {
         val uri = Uri.parse(BeaconConfig.WEB_APP_URL).buildUpon()
             .appendQueryParameter("sid", sid)
             .build()
+        // 이제부터 서비스가 웹앱 접속 여부를 확인 → 웹앱을 나가면 스캔 자동 중단
+        val watch = Intent(this, BeaconScanService::class.java)
+            .setAction(BeaconScanService.ACTION_WATCH_WEB)
+        ContextCompat.startForegroundService(this, watch)
         startActivity(Intent(Intent.ACTION_VIEW, uri))
     }
 

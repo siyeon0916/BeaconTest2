@@ -22,15 +22,6 @@ class App : Application() {
         beaconManager.beaconParsers.add(
             BeaconParser().setBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24") // iBeacon
         )
-        beaconManager.beaconParsers.add(
-            BeaconParser().setBeaconLayout(BeaconParser.EDDYSTONE_UID_LAYOUT)
-        )
-        beaconManager.beaconParsers.add(
-            BeaconParser().setBeaconLayout(BeaconParser.EDDYSTONE_URL_LAYOUT)
-        )
-        beaconManager.beaconParsers.add(
-            BeaconParser().setBeaconLayout(BeaconParser.ALTBEACON_LAYOUT)
-        )
 
         // 2. 🔥 [핵심] Android OS 30초 5회 제한 회피: 연속 스캔(Continuous Scan) 모드 설정
         // foregroundScanPeriod를 길게 잡거나 BetweenScanPeriod를 0으로 설정하여 반복적인 Start/Stop을 방지합니다.
